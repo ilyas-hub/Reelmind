@@ -4,3 +4,7 @@ dist
 *.log
 *.local
 .DS_Store
+
+# Ignore generated test videos but keep the placeholder
+public/videos/*
+!public/videos/.gitkeep
