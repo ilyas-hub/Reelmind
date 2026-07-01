@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: ['https://reelmind-pearl.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+  origin: ['https://reelmind-pearl.vercel.app', 'https://reelmind-one.vercel.app', 'https://reelmind-tf92.onrender.com', 'http://localhost:5173', 'http://localhost:3000'],
   credentials: true,
 }));
 app.use(express.json());
