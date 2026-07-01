@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './App.css';
 import type { ChatMessageType } from './types/chat';
 import ChatMessage from './components/ChatMessage';
@@ -35,7 +35,7 @@ function saveChat(messages: ChatMessageType[]) {
 export default function App() {
   const [messages, setMessages] = useState<ChatMessageType[]>(loadChat);
   const [isLoading, setIsLoading] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
