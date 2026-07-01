@@ -4,7 +4,7 @@ import type { ChatMessageType } from './types/chat';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 
-const API_URL = import.meta.env.VITE_API_URL || '/api/chat';
+const API_URL = import.meta.env.VITE_API_URL || 'https://reelmind-tf92.onrender.com/api/chat';
 const STORAGE_KEY = 'reelmind-chat';
 
 const DEFAULT_WELCOME: ChatMessageType = {
