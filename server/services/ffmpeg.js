@@ -123,9 +123,9 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
     const gifEnd = Math.min(duration - 0.5, 5);
 
     const filterChain = [
-      `[0:v]crop=ih*9/16:ih,scale='1080+(t-${duration-1})*54*between(t,${duration-1},${duration}):1920+(t-${duration-1})*96*between(t,${duration-1},${duration}):eval=frame',crop=1080:1920:(iw-1080)/2:(ih-1920)/2,setsar=1,setpts=PTS-STARTPTS[bg]`,
-      `[1:v]format=yuva420p,geq='lum(X,Y):cb(X,Y):cr(X,Y):if(lte(hypot(X-120,Y-120),120),255,0)',fade=t=in:st=${gifStart}:d=0.4:alpha=1,fade=t=out:st=${gifEnd}:d=0.4:alpha=1[react]`,
-      `[bg][react]overlay=W-w-60:H-h-240:enable='between(t,${gifStart},${gifEnd})'[v1]`,
+      `[0:v]crop=ih*9/16:ih,scale=1080+(t-${duration-1})*54*between(t\\,${duration-1}\\,${duration}):1920+(t-${duration-1})*96*between(t\\,${duration-1}\\,${duration}):eval=frame,crop=1080:1920:(iw-1080)/2:(ih-1920)/2,setsar=1,setpts=PTS-STARTPTS[bg]`,
+      `[1:v]format=yuva420p,geq=lum(X\\,Y):cb(X\\,Y):cr(X\\,Y):if(lte(hypot(X-120\\,Y-120)\\,120)\\,255\\,0),fade=t=in:st=${gifStart}:d=0.4:alpha=1,fade=t=out:st=${gifEnd}:d=0.4:alpha=1[react]`,
+      `[bg][react]overlay=W-w-60:H-h-240:enable='between(t\\,${gifStart}\\,${gifEnd})'[v1]`,
     ];
 
     let lastLabel = 'v1';
@@ -166,18 +166,10 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
     });
 
     return `${id}.mp4`;
-  } catch (err) {
-    [
-      bgPath,
-      gifPath,
-      gifMp4Path,
-      silentAudioPath,
-    ].forEach((p) => {
-      try {
-        if (fileExists(p)) fs.unlinkSync(p);
-      } catch {}
+  } finally {
+    [bgPath, gifPath, gifMp4Path, silentAudioPath].forEach((p) => {
+      try { if (fileExists(p)) fs.unlinkSync(p); } catch {}
     });
-    throw err;
   }
 }
 
