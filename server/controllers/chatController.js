@@ -260,7 +260,7 @@ async function handleProductRequest(res, req, conversation, productUrl, message,
   const videoUrl = `${req.protocol}://${host}/videos/${videoFilename}`;
   const finalMessage = {
     role: 'assistant',
-    content: `Here\'s your UGC video for **${product.productName}**!`,
+    content: `Here's your UGC video for ${product.productName}!`,
     videoUrl,
   };
   conversation.push(finalMessage);
