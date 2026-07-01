@@ -13,7 +13,7 @@ app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')));
 
 app.use('/api/chat', chatRoutes);
 
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/health', (req, res) => res.json({ ok: true, commit: '7507937' }));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
