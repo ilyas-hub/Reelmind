@@ -7,7 +7,7 @@ const axios = require('axios');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-const OUTPUT_DIR = path.join(__dirname, '..', 'public', 'videos');
+const OUTPUT_DIR = path.join(__dirname, '..', 'public', 'videos').replace(/\\/g, '/');
 
 const FONT_CANDIDATES = [
   '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
@@ -88,11 +88,11 @@ function splitCaption(caption, maxLength = 38) {
 async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, duration = 6 }) {
   ensureDir(OUTPUT_DIR);
   const id = uuidv4();
-  const bgPath = path.join(OUTPUT_DIR, `${id}_bg.mp4`);
-  const gifPath = path.join(OUTPUT_DIR, `${id}_gif.mp4`);
-  const gifMp4Path = path.join(OUTPUT_DIR, `${id}_gif_converted.mp4`);
-  const outputPath = path.join(OUTPUT_DIR, `${id}.mp4`);
-  const silentAudioPath = path.join(OUTPUT_DIR, `${id}_silent.aac`);
+  const bgPath = `${OUTPUT_DIR}/${id}_bg.mp4`;
+  const gifPath = `${OUTPUT_DIR}/${id}_gif.mp4`;
+  const gifMp4Path = `${OUTPUT_DIR}/${id}_gif_converted.mp4`;
+  const outputPath = `${OUTPUT_DIR}/${id}.mp4`;
+  const silentAudioPath = `${OUTPUT_DIR}/${id}_silent.aac`;
 
   try {
     await Promise.all([downloadFile(backgroundUrl, bgPath), downloadFile(gifUrl, gifPath)]);
@@ -140,53 +140,28 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
 
     const finalFilterComplex = filterChain.join(';');
 
-    const finalAudioPath = fileExists(audioPath) ? audioPath : await ensureSilentAudio(duration, silentAudioPath);
+    const finalAudioPath = fileExists(audioPath) ? audioPath.replace(/\\/g, '/') : await ensureSilentAudio(duration, silentAudioPath);
 
     await new Promise((resolve, reject) => {
       ffmpeg()
         .input(bgPath)
         .input(gifMp4Path)
         .input(finalAudioPath)
-        .complexFilter([finalFilterComplex], lastLabel)
+        .complexFilter([finalFilterComplex])
         .audioCodec('aac')
         .videoCodec('libx264')
         .outputOptions([
           '-t', String(duration),
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
+          '-map', `[${lastLabel}]`,
+          '-map', '2:a?',
           '-shortest',
-          '-shortest',
-          '-af', `afade=t=out:st=${duration - 1}:d=1`,
+          '-af', `volume=1.5,afade=t=out:st=${duration - 1}:d=1`,
         ])
         .output(outputPath)
-        .on('end', () => {
-          [
-            bgPath,
-            gifPath,
-            gifMp4Path,
-            silentAudioPath,
-          ].forEach((p) => {
-            try {
-              if (fileExists(p)) fs.unlinkSync(p);
-            } catch {
-              // ignore cleanup errors
-            }
-          });
-          resolve();
-        })
-        .on('error', (err) => {
-          [
-            bgPath,
-            gifPath,
-            gifMp4Path,
-            silentAudioPath,
-          ].forEach((p) => {
-            try {
-              if (fileExists(p)) fs.unlinkSync(p);
-            } catch {}
-          });
-          reject(err);
-        })
+        .on('end', resolve)
+        .on('error', reject)
         .run();
     });
 

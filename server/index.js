@@ -7,7 +7,10 @@ const chatRoutes = require('./routes/chat');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: ['https://reelmind-pearl.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+  credentials: true,
+}));
 app.use(express.json());
 app.use('/videos', express.static(path.join(__dirname, 'public', 'videos')));
 

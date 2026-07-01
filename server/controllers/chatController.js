@@ -11,7 +11,7 @@ const conversations = new Map();
 // --- LOCAL PRE-CLASSIFICATION PATTERNS ---
 
 const GREETING_PATTERNS = /^(hi|hello|hey|yo|sup|good morning|good evening|hey there|howdy|what's up|whats up)\b/i;
-const CAPABILITY_PATTERNS = /(what can you do|who are you|help|what is this|how do you work|what do you do|show me|tell me about)/i;
+const CAPABILITY_PATTERNS = /(what can you do|what you can do|what do you do|who are you|what is this|how does this work|how do you work|what's this|help|what can i ask|tell me more|show me)/i;
 
 const GREETING_POOL = [
   'Hey there! Got a product URL for me to whip up a quick video?',

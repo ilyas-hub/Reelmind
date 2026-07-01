@@ -4,7 +4,7 @@ import type { ChatMessageType } from './types/chat';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 
-const API_URL = 'http://localhost:3000/api/chat';
+const API_URL = import.meta.env.VITE_API_URL || '/api/chat';
 const STORAGE_KEY = 'reelmind-chat';
 
 const DEFAULT_WELCOME: ChatMessageType = {
