@@ -1,4 +1,4 @@
-const { classifyIntent, generateCaptionVariants, pickFunniestCaption, generateGeneralReply } = require('../services/gemini');
+const { generateCaptionVariants, pickFunniestCaption, generateGeneralReply } = require('../services/gemini');
 const { scrapeProduct } = require('../services/scraper');
 const { understandProduct } = require('../services/understander');
 const { fetchTalkingHeadVideo } = require('../services/pexels');
@@ -110,68 +110,17 @@ async function handleChat(req, res) {
     return await handleProductRequest(res, req, conversation, productUrl, message, streaming);
   }
 
-  // Fall through to Gemini intent classification
+  // General chat — answer directly with Gemini (no intent classifier)
   conversation.push({ role: 'user', content: message });
   try {
-    console.log('[INTENT] calling classifyIntent for:', message);
-    const intentResult = await classifyIntent(message, conversation);
-    console.log('[INTENT] result:', { message, intent: intentResult && intentResult.intent, raw: JSON.stringify(intentResult) });
-
-    if (intentResult.intent === 'greeting' || intentResult.intent === 'other') {
-      return replyJson(res, conversation, {
-        role: 'assistant',
-        content: intentResult.reply || 'Hey there! Send me a product URL and I\'ll make you a UGC video.',
-      }, streaming);
-    }
-
-    if (intentResult.intent === 'capability_question') {
-      return replyJson(res, conversation, {
-        role: 'assistant',
-        content: CAPABILITY_REPLY,
-      }, streaming);
-    }
-
-    if (intentResult.intent !== 'product_request') {
-      const fallbackReply = 'I\'m not sure how to help with that. Try sending me a product URL!';
-      try {
-        const generalReply = await generateGeneralReply(message, conversation);
-        return replyJson(res, conversation, {
-          role: 'assistant',
-          content: generalReply || fallbackReply,
-        }, streaming);
-      } catch (err) {
-        console.error('[GENERAL REPLY ERROR]', err.message || err);
-        return replyJson(res, conversation, {
-          role: 'assistant',
-          content: fallbackReply,
-        }, streaming);
-      }
-    }
-
-    // Product request — continue to pipeline
-    const urlMatch = message.match(/https?:\/\/[^\s]+|(?:www\.)?[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}(?:\/[^\s]*)?/i);
-    const productUrl = urlMatch ? urlMatch[0].trim() : null;
-    if (!productUrl) {
-      return replyJson(res, conversation, {
-        role: 'assistant',
-        content: 'I can generate a UGC video, but I need a product URL. Please paste one!',
-      }, streaming);
-    }
-    streaming = true;
-    return await handleProductRequest(res, req, conversation, productUrl, message, streaming);
+    const generalReply = await generateGeneralReply(message, conversation);
+    return replyJson(res, conversation, {
+      role: 'assistant',
+      content: generalReply,
+    }, streaming);
   } catch (err) {
-    console.log('[LLM ERROR]', err.message || err);
-    // Classifier failed — try a direct general reply before giving up
-    try {
-      const generalReply = await generateGeneralReply(message, conversation);
-      return replyJson(res, conversation, {
-        role: 'assistant',
-        content: generalReply,
-      }, streaming);
-    } catch (generalErr) {
-      console.error('[GENERAL REPLY FALLBACK ERROR]', generalErr.message || generalErr);
-      return res.json({ messages: [{ role: 'assistant', content: 'I\'m having trouble understanding that right now. Could you rephrase?' }] });
-    }
+    console.error('[GENERAL REPLY ERROR]', err.message || err);
+    return res.json({ messages: [{ role: 'assistant', content: 'I\'m having trouble understanding that right now. Could you rephrase?' }] });
   }
 }
 
