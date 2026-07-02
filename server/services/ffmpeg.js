@@ -94,6 +94,7 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
   const bgPath = `${OUTPUT_DIR}/${id}_bg.mp4`;
   const gifPath = `${OUTPUT_DIR}/${id}_gif.mp4`;
   const gifMp4Path = `${OUTPUT_DIR}/${id}_gif_converted.mp4`;
+  const intermediatePath = `${OUTPUT_DIR}/${id}_intermediate.mp4`;
   const outputPath = `${OUTPUT_DIR}/${id}.mp4`;
   const silentAudioPath = `${OUTPUT_DIR}/${id}_silent.aac`;
 
@@ -115,54 +116,70 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
         .run();
     });
 
-    const lines = splitCaption(caption.replace(/[\r\n]+/g, ' ').replace(/'/g, ''));
+    const lines = splitCaption(caption.replace(/[\r\n]+/g, ' '));
     const line1 = lines[0] || '';
     const line2 = lines[1] || '';
-    const fontPath = findFont();
-    const fontArg = fontPath ? `:fontfile=${fontPath}` : '';
-    const textStyle = `fontcolor=white:fontsize=48:box=1:boxcolor=black@0.75:boxborderw=10:x=(w-text_w)/2`;
 
     const gifStart = 1;
     const gifEnd = Math.min(duration - 0.5, 5);
 
-    const filterChain = [
+    // Pass 1: Overlay GIF on background (no text)
+    const pass1Filter = [
       `[0:v]crop=ih*9/16:ih,scale=1080:1920,crop=1080:1920,setsar=1,setpts=PTS-STARTPTS[bg]`,
       `[1:v]format=yuva420p,scale=240:240,pad=240:240:(ow-iw)/2:(oh-ih)/2:color=black@0,fade=t=in:st=${gifStart}:d=0.4:alpha=1,fade=t=out:st=${gifEnd}:d=0.4:alpha=1[react]`,
       `[bg][react]overlay=W-w-60:H-h-240:enable='between(t,${gifStart},${gifEnd})'[v1]`,
-    ];
+    ].join(';');
 
-    let lastLabel = 'v1';
-    if (line1 && fontPath) {
-      filterChain.push(`[${lastLabel}]drawtext=text='${line1}'${fontArg}:${textStyle}:y=(h*0.22)[v2]`);
-      lastLabel = 'v2';
-    }
-    if (line2 && fontPath) {
-      filterChain.push(`[${lastLabel}]drawtext=text='${line2}'${fontArg}:${textStyle}:y=(h*0.22+63)[v3]`);
-      lastLabel = 'v3';
-    }
-
-    const finalFilterComplex = filterChain.join(';');
-
-    console.log('\n=== FILTER COMPLEX ===\n' + JSON.stringify(finalFilterComplex));
     const finalAudioPath = fileExists(audioPath) ? audioPath.replace(/\\/g, '/') : await ensureSilentAudio(duration, silentAudioPath);
 
     await new Promise((resolve, reject) => {
       ffmpeg()
         .input(bgPath)
         .input(gifMp4Path)
-        .input(finalAudioPath)
-        .complexFilter([finalFilterComplex])
-        .audioCodec('aac')
+        .complexFilter([pass1Filter])
         .videoCodec('libx264')
+        .audioCodec('aac')
         .outputOptions([
           '-t', String(duration),
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
-          '-map', `[${lastLabel}]`,
-          '-map', '2:a?',
+          '-map', '[v1]',
+          '-shortest',
+        ])
+        .output(intermediatePath)
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
+    });
+
+    // Pass 2: Add text overlay and audio
+    const fontPath = findFont();
+    const textFilters = [];
+    if (line1 && fontPath) {
+      textFilters.push(`drawtext=text='${line1}':fontfile=${fontPath}:fontcolor=white:fontsize=48:box=1:boxcolor=black@0.75:boxborderw=10:x=(w-text_w)/2:y=(h*0.22)`);
+    }
+    if (line2 && fontPath) {
+      textFilters.push(`drawtext=text='${line2}':fontfile=${fontPath}:fontcolor=white:fontsize=48:box=1:boxcolor=black@0.75:boxborderw=10:x=(w-text_w)/2:y=(h*0.22+63)`);
+    }
+
+    await new Promise((resolve, reject) => {
+      const cmd = ffmpeg(intermediatePath)
+        .input(finalAudioPath)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .outputOptions([
+          '-t', String(duration),
+          '-pix_fmt', 'yuv420p',
+          '-movflags', '+faststart',
           '-shortest',
           '-af', `volume=1.5,afade=t=out:st=${duration - 1}:d=1`,
-        ])
+        ]);
+
+      if (textFilters.length > 0) {
+        cmd.videoFilter(textFilters.join(','));
+      }
+
+      cmd
         .output(outputPath)
         .on('start', (fullCmd) => console.log('[FFMPEG] COMMAND:', fullCmd))
         .on('end', resolve)
@@ -172,7 +189,7 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
 
     return `${id}.mp4`;
   } finally {
-    [bgPath, gifPath, gifMp4Path, silentAudioPath].forEach((p) => {
+    [bgPath, gifPath, gifMp4Path, intermediatePath, silentAudioPath].forEach((p) => {
       try { if (fileExists(p)) fs.unlinkSync(p); } catch {}
     });
   }
