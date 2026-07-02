@@ -1,4 +1,4 @@
-const { classifyIntent, generateCaptionVariants, pickFunniestCaption } = require('../services/gemini');
+const { classifyIntent, generateCaptionVariants, pickFunniestCaption, generateGeneralReply } = require('../services/gemini');
 const { scrapeProduct } = require('../services/scraper');
 const { understandProduct } = require('../services/understander');
 const { fetchTalkingHeadVideo } = require('../services/pexels');
@@ -132,10 +132,20 @@ async function handleChat(req, res) {
     }
 
     if (intentResult.intent !== 'product_request') {
-      return replyJson(res, conversation, {
-        role: 'assistant',
-        content: 'I\'m not sure how to help with that. Try sending me a product URL!',
-      }, streaming);
+      const fallbackReply = 'I\'m not sure how to help with that. Try sending me a product URL!';
+      try {
+        const generalReply = await generateGeneralReply(message, conversation);
+        return replyJson(res, conversation, {
+          role: 'assistant',
+          content: generalReply || fallbackReply,
+        }, streaming);
+      } catch (err) {
+        console.error('[GENERAL REPLY ERROR]', err.message || err);
+        return replyJson(res, conversation, {
+          role: 'assistant',
+          content: fallbackReply,
+        }, streaming);
+      }
     }
 
     // Product request — continue to pipeline

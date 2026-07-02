@@ -116,4 +116,20 @@ Respond ONLY with valid JSON, no markdown, no backticks, no preamble. JSON schem
   return captions[index] || captions[0];
 }
 
-module.exports = { classifyIntent, understandProduct, generateCaptionVariants, pickFunniestCaption };
+async function generateGeneralReply(message, history = []) {
+  const historyText = history
+    .slice(-10)
+    .map((h) => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.content}`)
+    .join('\n');
+
+  const prompt = `You are a helpful, friendly assistant inside a UGC video generator chat app.
+Answer the user's message naturally and concisely.
+If the user asks something unrelated, you may gently steer them back to the app.
+
+${historyText ? `Conversation history:\n${historyText}\n` : ''}User: ${message}
+Assistant:`;
+
+  return generateText(prompt);
+}
+
+module.exports = { classifyIntent, understandProduct, generateCaptionVariants, pickFunniestCaption, generateGeneralReply };
