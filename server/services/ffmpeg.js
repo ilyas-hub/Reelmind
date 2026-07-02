@@ -128,7 +128,7 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
     const filterChain = [
       `[0:v]crop=ih*9/16:ih,scale=1080:1920:force_original_aspect_ratio=decrease,crop=1080:1920,setsar=1,setpts=PTS-STARTPTS[bg]`,
       `[1:v]format=yuva420p,scale=240:240:force_original_aspect_ratio=decrease,pad=240:240:(ow-iw)/2:(oh-ih)/2:color=black@0,fade=t=in:st=${gifStart}:d=0.4:alpha=1,fade=t=out:st=${gifEnd}:d=0.4:alpha=1[react]`,
-      `[bg][react]overlay=W-w-60:H-h-240:enable='between(t\\,${gifStart}\\,${gifEnd})'[v1]`,
+      `[bg][react]overlay=W-w-60:H-h-240:enable='between(t,${gifStart},${gifEnd})'[v1]`,
     ];
 
     let lastLabel = 'v1';
