@@ -161,7 +161,17 @@ async function handleChat(req, res) {
     return await handleProductRequest(res, req, conversation, productUrl, message, streaming);
   } catch (err) {
     console.log('[LLM ERROR]', err.message || err);
-    return res.json({ messages: [{ role: 'assistant', content: 'I\'m having trouble understanding that right now. Could you rephrase?' }] });
+    // Classifier failed — try a direct general reply before giving up
+    try {
+      const generalReply = await generateGeneralReply(message, conversation);
+      return replyJson(res, conversation, {
+        role: 'assistant',
+        content: generalReply,
+      }, streaming);
+    } catch (generalErr) {
+      console.error('[GENERAL REPLY FALLBACK ERROR]', generalErr.message || generalErr);
+      return res.json({ messages: [{ role: 'assistant', content: 'I\'m having trouble understanding that right now. Could you rephrase?' }] });
+    }
   }
 }
 
