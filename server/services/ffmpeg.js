@@ -9,25 +9,6 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 const OUTPUT_DIR = path.join(__dirname, '..', 'public', 'videos').replace(/\\/g, '/');
 
-const FONT_CANDIDATES = [
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-  '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-  '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-  '/System/Library/Fonts/Helvetica.ttc',
-  'C:\\\\Windows\\\\Fonts\\\\arialbd.ttf',
-  'C:\\\\Windows\\\\Fonts\\\\segoeui.ttf',
-  'C:/Windows/Fonts/arialbd.ttf',
-  'C:/Windows/Fonts/segoeui.ttf',
-];
-
-function findFont() {
-  for (const candidate of FONT_CANDIDATES) {
-    if (fileExists(candidate)) return candidate.replace(/\\/g, '/');
-  }
-  return null;
-}
-
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -72,6 +53,33 @@ async function ensureSilentAudio(duration, dest) {
   });
 }
 
+function formatTime(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const sec = Math.floor(seconds % 60);
+  const cs = Math.floor((seconds % 1) * 100);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+}
+
+function generateAss(text, duration) {
+  const escaped = text.replace(/\{/g, '\\{').replace(/\}/g, '\\}').replace(/\n/g, '\\N');
+  const marginV = Math.round(1920 * 0.22);
+  return `[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&HBB000000,0,0,0,0,100,100,0,0,3,0,0,8,10,10,${marginV},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,${formatTime(duration)},Default,,0,0,0,,${escaped}
+`;
+}
+
 function splitCaption(caption, maxLength = 38) {
   const words = caption.split(' ');
   const lines = [];
@@ -94,9 +102,10 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
   const bgPath = `${OUTPUT_DIR}/${id}_bg.mp4`;
   const gifPath = `${OUTPUT_DIR}/${id}_gif.mp4`;
   const gifMp4Path = `${OUTPUT_DIR}/${id}_gif_converted.mp4`;
-  const intermediatePath = `${OUTPUT_DIR}/${id}_intermediate.mp4`;
   const outputPath = `${OUTPUT_DIR}/${id}.mp4`;
   const silentAudioPath = `${OUTPUT_DIR}/${id}_silent.aac`;
+  const assFilename = `${id}.ass`;
+  const assCwdPath = path.resolve(process.cwd(), assFilename);
 
   try {
     await Promise.all([downloadFile(backgroundUrl, bgPath), downloadFile(gifUrl, gifPath)]);
@@ -117,69 +126,49 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
     });
 
     const lines = splitCaption(caption.replace(/[\r\n]+/g, ' '));
-    const line1 = lines[0] || '';
-    const line2 = lines[1] || '';
+    const text = lines.join('\n');
+
+    if (text) {
+      fs.writeFileSync(assCwdPath, generateAss(text, duration));
+    }
 
     const gifStart = 1;
     const gifEnd = Math.min(duration - 0.5, 5);
 
-    // Pass 1: Overlay GIF on background (no text)
-    const pass1Filter = [
+    // Build single filter chain with subtitles instead of drawtext
+    const filterChain = [
       `[0:v]crop=ih*9/16:ih,scale=1080:1920,crop=1080:1920,setsar=1,setpts=PTS-STARTPTS[bg]`,
       `[1:v]format=yuva420p,scale=240:240,pad=240:240:(ow-iw)/2:(oh-ih)/2:color=black@0,fade=t=in:st=${gifStart}:d=0.4:alpha=1,fade=t=out:st=${gifEnd}:d=0.4:alpha=1[react]`,
       `[bg][react]overlay=W-w-60:H-h-240:enable='between(t,${gifStart},${gifEnd})'[v1]`,
-    ].join(';');
+    ];
 
+    if (text) {
+      filterChain.push(`[v1]ass=${assFilename}[vout]`);
+    }
+
+    const finalFilterComplex = filterChain.join(';');
+    const lastLabel = text ? 'vout' : 'v1';
+
+    console.log('\n=== FILTER COMPLEX ===\n' + JSON.stringify(finalFilterComplex));
     const finalAudioPath = fileExists(audioPath) ? audioPath.replace(/\\/g, '/') : await ensureSilentAudio(duration, silentAudioPath);
 
     await new Promise((resolve, reject) => {
       ffmpeg()
         .input(bgPath)
         .input(gifMp4Path)
-        .complexFilter([pass1Filter])
-        .videoCodec('libx264')
-        .audioCodec('aac')
-        .outputOptions([
-          '-t', String(duration),
-          '-pix_fmt', 'yuv420p',
-          '-movflags', '+faststart',
-          '-map', '[v1]',
-          '-shortest',
-        ])
-        .output(intermediatePath)
-        .on('end', resolve)
-        .on('error', reject)
-        .run();
-    });
-
-    // Pass 2: Add text overlay and audio
-    const fontPath = findFont();
-    const textFilters = [];
-    if (line1 && fontPath) {
-      textFilters.push(`drawtext=text='${line1}':fontfile=${fontPath}:fontcolor=white:fontsize=48:box=1:boxcolor=black@0.75:boxborderw=10:x=(w-text_w)/2:y=(h*0.22)`);
-    }
-    if (line2 && fontPath) {
-      textFilters.push(`drawtext=text='${line2}':fontfile=${fontPath}:fontcolor=white:fontsize=48:box=1:boxcolor=black@0.75:boxborderw=10:x=(w-text_w)/2:y=(h*0.22+63)`);
-    }
-
-    await new Promise((resolve, reject) => {
-      const cmd = ffmpeg(intermediatePath)
         .input(finalAudioPath)
-        .videoCodec('libx264')
+        .complexFilter([finalFilterComplex])
         .audioCodec('aac')
+        .videoCodec('libx264')
         .outputOptions([
           '-t', String(duration),
           '-pix_fmt', 'yuv420p',
           '-movflags', '+faststart',
+          '-map', `[${lastLabel}]`,
+          '-map', '2:a?',
           '-shortest',
           '-af', `volume=1.5,afade=t=out:st=${duration - 1}:d=1`,
-        ]);
-
-      if (textFilters.length > 0) {
-        cmd.videoFilter(textFilters.join(','));
-      }
-
-      cmd
+        ])
         .output(outputPath)
         .on('start', (fullCmd) => console.log('[FFMPEG] COMMAND:', fullCmd))
         .on('end', resolve)
@@ -189,7 +178,7 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
 
     return `${id}.mp4`;
   } finally {
-    [bgPath, gifPath, gifMp4Path, intermediatePath, silentAudioPath].forEach((p) => {
+    [bgPath, gifPath, gifMp4Path, assCwdPath, silentAudioPath].forEach((p) => {
       try { if (fileExists(p)) fs.unlinkSync(p); } catch {}
     });
   }
