@@ -143,6 +143,7 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
 
     const finalFilterComplex = filterChain.join(';');
 
+    console.log('\n=== FILTER COMPLEX ===\n' + JSON.stringify(finalFilterComplex));
     const finalAudioPath = fileExists(audioPath) ? audioPath.replace(/\\/g, '/') : await ensureSilentAudio(duration, silentAudioPath);
 
     await new Promise((resolve, reject) => {
@@ -163,6 +164,7 @@ async function generateVideo({ backgroundUrl, gifUrl, audioPath, caption, durati
           '-af', `volume=1.5,afade=t=out:st=${duration - 1}:d=1`,
         ])
         .output(outputPath)
+        .on('start', (fullCmd) => console.log('[FFMPEG] COMMAND:', fullCmd))
         .on('end', resolve)
         .on('error', reject)
         .run();
